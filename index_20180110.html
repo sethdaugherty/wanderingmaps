@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <script src="https://cdn.jsdelivr.net/npm/vue"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+  
+    <style>
+      /* Always set the map height explicitly to define the size of the div
+       * element that contains the map. */
+      .pathMap {
+        height: 600px;
+        width: 1000px;
+        border: 1px solid black;
+      }
+      /* Optional: Makes the sample page fill the window. */
+      html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+      .layoutSection {
+          margin: 30px;
+          padding: 10px;
+          border-bottom: 1px dashed brown;
+      }
+      .mapColumn {
+	      float: left;
+		}
+		
+		.mapRow:after {
+		    content: "";
+		    display: table;
+		    clear: both;
+		}
+    </style>
+  </head>
+  <body>
+    <div id="appContainer" >
+        <layoutsection positions="hello">
+            <mapcontrols :currentdate="currentdate" v-on:datechange="dateChangeHandler">
+                <pathmap :positions="positions" id="wanderingMap"></pathmap>
+            </mapcontrols>
+        </layoutsection>
+        
+        <layoutsection :positions="positions">
+            Section 2
+        </layoutsection>
+    
+        <layoutsection>
+        </layoutsection>
+    </div>
+        
+        
+    <button onclick="loadPositionsFromApi('20180103')">Load positions!</button>    
+    <script>
+    Vue.component('layoutsection', {
+        props: ['positions'],
+        template: '<div class="layoutSection"><slot>Empty Section</slot></div>'
+    });
+
+    Vue.component('mapcontrols', {
+    	props: ['currentdate'],
+    	template: '<div class="mapControls"><h2>Travels for {{ formattedDate }}</h2>' + //TODO: format the date
+    	          '<div class="mapRow">' +
+    	          '<div class="mapColumn">'+ 
+    	              '<button class="prevDayButton" v-on:click="previousDay">&lt;</button>'+
+    	          '</div>' +
+    	          '<div class="mapColumn"><slot>Map loading</slot></div>' + 
+    	          '<div class="mapColumn">'+
+    	              '<button class="nextDayButton" v-on:click="nextDay">&gt;</button>'+ 
+    	          '</div>' +
+    	          '</div>' +
+    	          '</div>',
+    	computed: {
+    	    formattedDate: function() {
+    	        return this.formatDate(this.currentdate);
+    	    },
+    	    currentDateObject: function() {
+    	        //console.log("computing currentDateObject", this.convertToDateObject(this.currentdate));
+    	        return this.convertToDateObject(this.currentdate);
+    	    }
+    	},
+    	methods: {
+    	    previousDay: function() { 
+                //console.log("currentddateobject: ", this.currentDateObject);
+
+                var prevDate = this.addDays(this.currentDateObject, -1);
+                //console.log("prevdate:", prevDate);
+
+                this.currentdate = this.getCurrentDateString(prevDate);
+                this.currentDateObject = prevDate;
+                //console.log("currentdate:", this.currentdate);
+                this.$emit('datechange', this.currentdate);
+    	    },
+    	    nextDay: function() {
+    	        console.log("currentddateobject: ", this.currentDateObject);
+    	        var nextDate = this.addDays(this.currentDateObject, 1);
+                //console.log("nextdate:", nextDate);
+
+    	        // change the string representation too
+    	        this.currentdate = this.getCurrentDateString(nextDate);
+    	        this.currentDateObject = nextDate;
+                //console.log("currentdate:", this.currentdate);
+                this.$emit('datechange', this.currentdate);
+    	    },
+    	    formatDate: function(dateString) {
+    	        // Assumes input is in format YYYYMMDD, converts to output format: Jan 1, 2018
+    	        var date = this.convertToDateObject(dateString);
+    	        return date.toDateString();
+    	    },
+    	    convertToDateObject: function(dateString) { // TOOD: should probably use a date library?
+    	        return new Date(dateString.substring(0,4), dateString.substring(4,6)-1, dateString.substring(6,8), 0, 0, 0, 1);
+    	    },
+    	    getCurrentDateString: function(date) {
+    	        var day = date.getDate();
+    	        var month = date.getMonth()+1;
+    	        var year = date.getFullYear();
+    	        return year + (month < 10 ? '0' : '') + month  + (day < 10 ? '0' : '') + day;
+    	    },
+    	   addDays: function(date, days) {
+    	        return new Date(date.getTime() + days*86400000);
+    	    }
+    	    
+    	}
+    });
+    
+    Vue.component('pathmap', {
+        props: ['positions', 'id'],
+        template: '<div class="pathMap" :id="id">pathmap {{ positions }}</div>',
+        data: {
+        	'map' : null
+        },
+        mounted: function() {
+        	this.initMap();
+        },
+        watch: {
+            positions: function (val) {
+              this.positions = val;
+              //console.log("got new positions", val, this.id, this.positions, this.map);
+              this.initMap();
+              //this.drawLine();
+              this.refreshPath();
+            }
+          },
+        methods: {
+        	initMap: function() {
+        		//console.log("starting initMap", this.id);
+        		if (this.map == null) {
+        			/*if (typeof google === 'undefined') {
+                        // TODO: wait until map is loaded
+                        //console.log("google maps not loaded yet!!!! shiiiiiit");
+                        var millisWaited = 0;
+                        while (millisWaited < 30000) { // Loop for 30 seconds trying to load the map
+                            await sleep(100);
+                            if (typeof google !== 'undefined') {
+                            	break;
+                            }
+                        }
+        			}*/
+        			//console.log("map target", document.getElementById(this.id));
+       				this.map = new google.maps.Map(document.getElementById(this.id), {
+                           zoom: 15,
+                           center: new google.maps.LatLng(9.6350679 ,-85.1572434),
+                           mapTypeId: 'terrain'
+                         });
+       				//console.log("loaded map");
+       				
+       				var pathCoordinates = [];
+                    this.polyline = new google.maps.Polyline({
+                        path: pathCoordinates,
+                        geodesic: true,
+                        strokeColor: '#FF0000',
+                        strokeOpacity: 1.0,
+                        strokeWeight: 4
+                     });  
+                     
+                     this.polyline.setMap(this.map);
+       				
+       	            /*if (this.positions != null) {
+       	                //console.log("attempting to draw lines", this.positions);
+       	                this.drawLine();
+       	            }*/
+        		} 
+        	},
+        	refreshPath: function() {
+        	    var path = this.polyline.getPath();
+        	    console.log("polyline is ", this.polyline);
+        	    console.log("path is", path);
+        	    // empty the polyline's path
+        	    /*for (var j=0; j<path.length; j++) {
+        	        path.removeAt(j);
+        	    }
+        	    */
+        	    path.clear();
+        	    console.log("after emptying path is", path);
+        	    
+        	    // add the new points
+        	    var positionsArray = Array.from(this.positions);
+        	    for (const i in positionsArray) {
+                        //console.log("i", i);
+                        var lat = positionsArray[i].latitude;
+                        var lon = positionsArray[i].longitude;
+                        var latLng = new google.maps.LatLng(lat,lon);
+                        path.push(latLng);
+                        //path.push({"lat": lat, "lng": lon});
+                        //console.log("Appending point", lat, lon);
+                }
+        	    
+        	    console.log("new path is ", path);
+        	}
+            /*drawLine: function() {
+                //console.log("drawing lines!", this.positions,  this.map);
+                if (this.map != null && this.positions != null) {
+                    var pathCoordinates = [];
+                    //console.log("positions length", this.positions.length, Array.from(this.positions));
+                    var positionsArray = Array.from(this.positions); // For some reason data is coming in as an object, not an array
+                    //console.log("positionsArray", positionsArray);
+                    for (const i in this.positions) {
+                    	//console.log("i", i);
+                        var lat = positionsArray[i].latitude;
+                        var lon = positionsArray[i].longitude;
+                        var latLng = new google.maps.LatLng(lat,lon);
+                        pathCoordinates.push({"lat": lat, "lng": lon});
+                        //console.log("Appending point", lat, lon);
+                    }
+                    //console.log("path coords", pathCoordinates);
+                     var path = new google.maps.Polyline({
+                         path: pathCoordinates,
+                         geodesic: true,
+                         strokeColor: '#FF0000',
+                         strokeOpacity: 1.0,
+                         strokeWeight: 2
+                      });  
+                      
+                      path.setMap(this.map);
+                }
+            }*/
+        }
+    })
+    
+    function initMap2() {
+
+
+        // Create a <script> tag and set the USGS URL as the source.
+        var script = document.createElement('script');
+        // This example uses a local copy of the GeoJSON stored at
+        // http://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_week.geojsonp
+        script.src = 'positions.js';
+        document.getElementsByTagName('head')[0].appendChild(script);
+        
+        //console.log("pos callback", positions_callback);
+        app.map = map;
+      };
+    
+    
+    /*function loadPositions() {
+        //console.log("clicked load positions!");
+        app.positions = [
+            {
+                "latitude":9.6350679 , 
+                "longitude":-85.1572434 , 
+                "timestamp": 1515101280540 ,
+            }, 
+            {
+                "latitude":9.6350677 , 
+                "longitude":-85.1572434 , 
+                "timestamp": 1515101290479 ,
+            }, 
+            {
+                "latitude":9.6350674 , 
+                "longitude":-85.1572436 , 
+                "timestamp": 1515101297538 ,
+            }, 
+            {
+                "latitude":9.6350673 , 
+                "longitude":-85.1572436 , 
+                "timestamp": 1515101302606 ,
+            }, 
+            {
+                "latitude":9.6350872 , 
+                "longitude":-85.1572352 , 
+                "timestamp": 1515101312448 ,
+            }, 
+        ];
+    };*/
+    
+    
+    var currentDate = "20180109"; // TODO: calculate this with a function
+    var positionsData = {'positions' : null, 'currentdate' : currentDate,  'otherdat': 1235};
+    
+
+    
+    var app = null;
+    
+    function initApp() {
+    	
+    	//console.log("called intiApp" + positionsData.positions);
+        app = new Vue({
+            el: '#appContainer',
+            data: positionsData,
+            methods: {
+                dateChangeHandler: function(date) {
+                    // TODO: is this method necessary?
+                    
+                    this.currentdate = date;
+                    //console.log("handled date changeddddd", date);
+                    
+                    loadPositionsFromApi(date);                
+                    
+                }
+            }
+          });
+    }
+    
+    function loadPositions(positionSrc) {
+	    var script = document.createElement('script');
+	    // This example uses a local copy of the GeoJSON stored at
+	    // http://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_week.geojsonp
+	    script.src = positionSrc;
+	    document.getElementsByTagName('head')[0].appendChild(script);
+	};
+	
+    window.positions_callback = function(results) {
+        ////console.log("called positions_callback" + positionsData.positions, results);
+        positionsData.positions = results.positions;
+    };
+	
+	//loadPositions('positions.js');
+	
+	function loadPositionsFromApi(date) {
+		//var baseUrl = "https://localhost:9001/api/list/";
+		var baseUrl = "http://www.sethdaugherty.io:9001/api/list/";
+
+		$.get(baseUrl + date, function(response) {
+			console.log("fetched", response);
+			  positionsData.positions = response.positions;
+		});
+	
+	}
+	
+	$(function() {
+		loadPositionsFromApi("20180109");
+	});
+    </script>
+    <script async defer
+        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAlnBT4qBjIXN5IOZdPr3XVTAcMc3x3cog&callback=initApp">
+    </script>
+  </body>
+</html>

@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <link href="https://fonts.googleapis.com/css?family=Roboto+Condensed" rel="stylesheet">
+    <link href='http://fonts.googleapis.com/css?family=Bad+Script|Raleway:400,500,600,700,300|Lora:400' rel='stylesheet' type='text/css'/>
+    
+    <script src="https://cdn.jsdelivr.net/npm/vue"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+
+    <style>
+        body {
+            color: #fff7e8;
+            font-family: 'Roboto Condensed', sans-serif;
+            background-color: #1D3841;
+            
+        }
+        h1, h2, h3, h4, h5 {
+            font-weight: normal;
+            border-bottom: 1px dashed #fffa80;
+        }
+        header {
+            background: #070f16c2;
+            font-size: 200%;
+            padding: 30px;
+            border-bottom: 1px solid #fffa80;
+            
+            font-family: Raleway;
+            font-size: 60px;
+            display: block;
+            transition: all .3s;
+            letter-spacing: 8px;
+            font-variant: small-caps;
+        }
+      /* Always set the map height explicitly to define the size of the div
+       * element that contains the map. */
+      .googleMap {
+            width:100%;
+            height:600px;
+      }
+      .mapControls {
+        width: 100%;
+      }
+      #appContainer {
+
+      }
+      .parallax { 
+        /* The image used */
+        background-image: url("img_parallax.jpg");
+    
+        /* Set a specific height */
+        /*height: 100%; */
+    
+        /* Create the parallax scrolling effect */
+        background-attachment: fixed;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-size: cover;
+      }
+      /* Optional: Makes the sample page fill the window. */
+      html, body {
+        height: 100%;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+      }
+      .layoutSection {
+          margin: 200px 0;
+          padding: 10px 0;
+          border-bottom: 1px dashed #fffa80;
+          background-color: #070F16;
+          width: 100%;
+      }
+      .layoutSection h2 {
+        padding: 5px 30px;
+      }
+      .mapColumn {
+	      float: left;
+		}
+		
+		.mapRow:after {
+		    content: "";
+		    display: table;
+		    clear: both;
+		}
+        #statusbar {
+            float: right;
+            background: #31334452;
+            padding: 10px;
+            border-radius: 0 0 0 10px;
+        }
+        #milesBreakdown svg {
+            height: 400px;
+            width: 800px;
+        }
+        #milesBreakdown {
+            margin: 0px auto 15px;
+            padding: 15px 30px;
+            border-radius: 15px;
+            text-align: left;
+            width: 860px;
+            height: 440px;
+        }
+        #milesBreakdownInner {
+            -webkit-column-count: 3; /* Chrome, Safari, Opera */
+            -moz-column-count: 3; /* Firefox */
+            column-count: 3;
+        }
+        #milesBreakdown h2 {
+            font-weight: 600;
+            font-size: 120%;
+            text-align: center;
+        }
+        #milesBreakdown text {
+            fill: #FFFFFF;
+        }
+        #milesBreakdown .nv-tick{
+            stroke-width: 0px
+        }
+        g.tick {
+            opacity: 0;
+            stroke-width: 0px;
+        }
+    </style>
+  </head>
+  <body>
+    <div id="appContainer" class="parallax" >
+        <headersection></headersection>
+        <layoutsection positions="hello">
+            <mapcontrols :currentdate="currentdate">
+                <pathmap :positions="positions" id="wanderingMap"></pathmap>
+            </mapcontrols>
+        </layoutsection>
+    </div>
+        
+        
+    <script>
+    Vue.component('layoutsection', {
+        props: ['positions'],
+        template: '<div class="layoutSection"><slot>Empty Section</slot></div>'
+    });
+    
+    // TODO: does this need to be a separate component, or can it just be part of the main template?
+    Vue.component('headersection', {
+        template: '<div><header>Wandering Miles</header>' +
+                  '<div id="statusbar">' +
+                      '<span><strong>Currently in: </strong> Costa Rica</span> ' + 
+                      '<span><strong>Next: </strong> Columbia</span> ' +
+                      '<span><strong>Total Miles: </strong> 27,479</span>' +
+                  '</div>' + 
+                  '</div>'
+        
+    });
+
+    Vue.component('mapcontrols', {
+    	props: ['currentdate'],
+    	template: '<div class="mapControls"><h2>Wanderings for {{ formattedDate }}</h2>' + //TODO: format the date
+    	          '<div class="mapRow">' +
+    	              '<button class="prevDayButton" v-on:click="previousDay">&lt;</button>'+
+    	              '<button class="nextDayButton" v-on:click="nextDay">&gt;</button>'+ 
+    	          '</div>' +
+                  '<slot>Map loading</slot>' +
+                  '</div>',
+    	computed: {
+    	    formattedDate: function() {
+    	        return this.formatDate(this.currentdate);
+    	    },
+    	    currentDateObject: function() {
+    	        //console.log("computing currentDateObject", this.convertToDateObject(this.currentdate));
+    	        return this.convertToDateObject(this.currentdate);
+    	    }
+    	},
+    	methods: {
+    	    previousDay: function() { 
+                //console.log("currentddateobject: ", this.currentDateObject);
+
+                var prevDate = this.addDays(this.currentDateObject, -1);
+                //console.log("prevdate:", prevDate);
+
+                this.currentdate = this.getCurrentDateString(prevDate);
+                this.currentDateObject = prevDate;
+                //console.log("currentdate:", this.currentdate);
+                this.$emit('datechange', this.currentdate);
+    	    },
+    	    nextDay: function() {
+    	        console.log("currentddateobject: ", this.currentDateObject);
+    	        var nextDate = this.addDays(this.currentDateObject, 1);
+                //console.log("nextdate:", nextDate);
+
+    	        // change the string representation too
+    	        this.currentdate = this.getCurrentDateString(nextDate);
+    	        this.currentDateObject = nextDate;
+                //console.log("currentdate:", this.currentdate);
+                this.$emit('datechange', this.currentdate);
+    	    },
+    	    formatDate: function(dateString) {
+    	        // Assumes input is in format YYYYMMDD, converts to output format: January 1, 2018
+    	          var monthNames = ["January", "February", "March", "April", "May", "June",
+                    "July", "August", "September", "October", "November", "December"
+                  ];
+    	        var date = this.convertToDateObject(dateString);
+    	        return monthNames[date.getMonth()] + " " + date.getDate() + ", " + date.getFullYear();
+    	    },
+    	    convertToDateObject: function(dateString) { // TOOD: should probably use a date library?
+    	        return new Date(dateString.substring(0,4), dateString.substring(4,6)-1, dateString.substring(6,8), 0, 0, 0, 1);
+    	    },
+    	    getCurrentDateString: function(date) {
+    	        var day = date.getDate();
+    	        var month = date.getMonth()+1;
+    	        var year = date.getFullYear();
+    	        return year + (month < 10 ? '0' : '') + month  + (day < 10 ? '0' : '') + day;
+    	    },
+    	   addDays: function(date, days) {
+    	        return new Date(date.getTime() + days*86400000);
+    	    }
+    	    
+    	}
+    });
+    
+    
+    Vue.component('pathmap', {
+        props: ['positions', 'id'],
+        template: '<div><div class="googleMap" :id="id">pathmap {{ positions }}</div><button v-on:click="logpositions">Log Positions</button></div>',
+        data: {
+        	'map' : null
+        },
+        mounted: function() {
+        	this.initMap();
+        },
+        watch: {
+            positions: function (val) {
+              this.positions = val;
+              //console.log("got new positions", val, this.id, this.positions, this.map);
+              this.initMap();
+            }
+          },
+        methods: {
+            logpositions: function() {
+                console.log("log positions!");
+                console.log(JSON.stringify(this.polyline.getPath()));
+            },
+            addLatLng: function(event) {
+                console.log("added ladLong");
+                var path = this.polyline.getPath();
+
+                // Because path is an MVCArray, we can simply append a new coordinate
+                // and it will automatically appear.
+                path.push(event.latLng);
+
+                // Add a new marker at the new plotted point on the polyline.
+                var marker = new google.maps.Marker({
+                  position: event.latLng,
+                  title: '#' + path.getLength(),
+                  map: this.map
+                });
+            },
+        	initMap: function() {
+        		//console.log("starting initMap", this.id);
+        		if (this.map == null) {
+        			/*if (typeof google === 'undefined') {
+                        // TODO: wait until map is loaded
+                        //console.log("google maps not loaded yet!!!! shiiiiiit");
+                        var millisWaited = 0;
+                        while (millisWaited < 30000) { // Loop for 30 seconds trying to load the map
+                            await sleep(100);
+                            if (typeof google !== 'undefined') {
+                            	break;
+                            }
+                        }
+        			}*/
+        			//console.log("map target", document.getElementById(this.id));
+       				this.map = new google.maps.Map(document.getElementById(this.id), {
+                           zoom: 3,
+                           center: new google.maps.LatLng(0 ,0),
+                           mapTypeId: 'terrain',
+                           //styles: mapStyles
+                         });
+       				//console.log("loaded map");
+       				
+       				var pathCoordinates = [];
+                    this.polyline = new google.maps.Polyline({
+                        geodesic: true,
+                        strokeColor: '#FFE3AA',
+                        strokeOpacity: 0.8,
+                        strokeWeight: 3
+                     });  
+                     
+                     this.polyline.setMap(this.map);
+                     this.map.addListener('click', this.addLatLng);
+
+       				
+       	            /*if (this.positions != null) {
+       	                //console.log("attempting to draw lines", this.positions);
+       	                this.drawLine();
+       	            }*/
+        		} 
+        	}
+        }
+    });
+    
+    var currentDate = "20180108"; // TODO: calculate this with a function
+    var positionsData = {
+            'positions' : null, 
+            'currentdate' : currentDate, 
+            'countrycodes' : ['CRI', 'BLZ', 'MEX', 'USA', 'CAN', 'THA', 'VNM', 'LAO', 'KHM', 'IDN', 'PHL', 'GBR', 'FRA', 'DEU', 'HRV', 'SVK', 'CZE', 'AUT', 'NLD', 'HUN', 'BEL', 'LUX']
+            };
+    
+    
+    
+    var app = null;
+    
+    function initApp() {
+    	
+    	//console.log("called intiApp" + positionsData.positions);
+        app = new Vue({
+            el: '#appContainer',
+            data: positionsData,
+            methods: {
+                dateChangeHandler: function(date) {
+                    // TODO: is this method necessary?
+                    
+                    this.currentdate = date;
+                    //console.log("handled date changeddddd", date);
+                    
+                    loadPositionsFromApi(date);                
+                    
+                }
+            }
+          });
+    }
+    
+    function loadPositions(positionSrc) {
+	    var script = document.createElement('script');
+	    // This example uses a local copy of the GeoJSON stored at
+	    // http://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_week.geojsonp
+	    script.src = positionSrc;
+	    document.getElementsByTagName('head')[0].appendChild(script);
+	};
+	
+    window.positions_callback = function(results) {
+        ////console.log("called positions_callback" + positionsData.positions, results);
+        positionsData.positions = results.positions;
+    };
+	
+	//loadPositions('positions.js');
+	
+	function loadPositionsFromApi(date) {
+		//var baseUrl = "https://localhost:9001/api/list/";
+		var baseUrl = "http://www.sethdaugherty.io:9001/api/list/";
+
+		$.get(baseUrl + date, function(response) {
+			console.log("fetched", response);
+			  positionsData.positions = response.positions;
+		});
+	
+	}
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+
+	
+	var mapStyles = [
+        {
+            "elementType": "geometry",
+            "stylers": [
+              {
+                "color": "#1d2c4d"
+              }
+            ]
+          },
+          {
+            "elementType": "geometry.fill",
+            "stylers": [
+              {
+                "saturation": -100
+              }
+            ]
+          },
+          {
+            "elementType": "labels",
+            "stylers": [
+              {
+                "visibility": "off"
+              }
+            ]
+          },
+          {
+            "elementType": "labels.text.fill",
+            "stylers": [
+              {
+                "color": "#8ec3b9"
+              }
+            ]
+          },
+          {
+            "elementType": "labels.text.stroke",
+            "stylers": [
+              {
+                "color": "#1a3646"
+              }
+            ]
+          },
+          {
+            "featureType": "administrative",
+            "elementType": "geometry",
+            "stylers": [
+              {
+                "visibility": "off"
+              }
+            ]
+          },
+          {
+            "featureType": "administrative.country",
+            "elementType": "geometry.stroke",
+            "stylers": [
+              {
+                "color": "#4b6878"
+              }
+            ]
+          },
+          {
+            "featureType": "administrative.land_parcel",
+            "stylers": [
+              {
+                "visibility": "off"
+              }
+            ]
+          },
+          {
+            "featureType": "administrative.land_parcel",
+            "elementType": "labels.text.fill",
+            "stylers": [
+              {
+                "color": "#64779e"
+              }
+            ]
+          },
+          {
+            "featureType": "administrative.neighborhood",
+            "stylers": [
+              {
+                "visibility": "off"
+              }
+            ]
+          },
+          {
+            "featureType": "administrative.province",
+            "elementType": "geometry.stroke",
+            "stylers": [
+              {
+                "color": "#4b6878"
+              }
+            ]
+          },
+          {
+            "featureType": "landscape.man_made",
+            "elementType": "geometry.stroke",
+            "stylers": [
+              {
+                "color": "#334e87"
+              }
+            ]
+          },
+          {
+            "featureType": "landscape.natural",
+            "elementType": "geometry",
+            "stylers": [
+              {
+                "color": "#023e58"
+              }
+            ]
+          },
+          {
+            "featureType": "landscape.natural",
+            "elementType": "geometry.fill",
+            "stylers": [
+              {
+                "color": "#346270"
+              }
+            ]
+          },
+          {
+            "featureType": "poi",
+            "stylers": [
+              {
+                "visibility": "off"
+              }
+            ]
+          },
+          {
+            "featureType": "poi",
+            "elementType": "geometry",
+            "stylers": [
+              {
+                "color": "#283d6a"
+              }
+            ]
+          },
+          {
+            "featureType": "poi",
+            "elementType": "labels.text.fill",
+            "stylers": [
+              {
+                "color": "#6f9ba5"
+              }
+            ]
+          },
+          {
+            "featureType": "poi",
+            "elementType": "labels.text.stroke",
+            "stylers": [
+              {
+                "color": "#1d2c4d"
+              }
+            ]
+          },
+          {
+            "featureType": "poi.park",
+            "elementType": "geometry.fill",
+            "stylers": [
+              {
+                "color": "#023e58"
+              }
+            ]
+          },
+          {
+            "featureType": "poi.park",
+            "elementType": "labels.text.fill",
+            "stylers": [
+              {
+                "color": "#3C7680"
+              }
+            ]
+          },
+          {
+            "featureType": "road",
+            "stylers": [
+              {
+                "visibility": "off"
+              }
+            ]
+          },
+          {
+            "featureType": "road",
+            "elementType": "geometry",
+            "stylers": [
+              {
+                "color": "#304a7d"
+              }
+            ]
+          },
+          {
+            "featureType": "road",
+            "elementType": "labels.icon",
+            "stylers": [
+              {
+                "visibility": "off"
+              }
+            ]
+          },
+          {
+            "featureType": "road",
+            "elementType": "labels.text.fill",
+            "stylers": [
+              {
+                "color": "#98a5be"
+              }
+            ]
+          },
+          {
+            "featureType": "road",
+            "elementType": "labels.text.stroke",
+            "stylers": [
+              {
+                "color": "#1d2c4d"
+              }
+            ]
+          },
+          {
+            "featureType": "road.highway",
+            "elementType": "geometry",
+            "stylers": [
+              {
+                "color": "#2c6675"
+              }
+            ]
+          },
+          {
+            "featureType": "road.highway",
+            "elementType": "geometry.stroke",
+            "stylers": [
+              {
+                "color": "#255763"
+              }
+            ]
+          },
+          {
+            "featureType": "road.highway",
+            "elementType": "labels.text.fill",
+            "stylers": [
+              {
+                "color": "#b0d5ce"
+              }
+            ]
+          },
+          {
+            "featureType": "road.highway",
+            "elementType": "labels.text.stroke",
+            "stylers": [
+              {
+                "color": "#023e58"
+              }
+            ]
+          },
+          {
+            "featureType": "transit",
+            "stylers": [
+              {
+                "visibility": "off"
+              }
+            ]
+          },
+          {
+            "featureType": "transit",
+            "elementType": "labels.text.fill",
+            "stylers": [
+              {
+                "color": "#98a5be"
+              }
+            ]
+          },
+          {
+            "featureType": "transit",
+            "elementType": "labels.text.stroke",
+            "stylers": [
+              {
+                "color": "#1d2c4d"
+              }
+            ]
+          },
+          {
+            "featureType": "transit.line",
+            "elementType": "geometry.fill",
+            "stylers": [
+              {
+                "color": "#283d6a"
+              }
+            ]
+          },
+          {
+            "featureType": "transit.station",
+            "elementType": "geometry",
+            "stylers": [
+              {
+                "color": "#3a4762"
+              }
+            ]
+          },
+          {
+            "featureType": "water",
+            "elementType": "geometry",
+            "stylers": [
+              {
+                "color": "#0e1626"
+              }
+            ]
+          },
+          {
+            "featureType": "water",
+            "elementType": "geometry.fill",
+            "stylers": [
+              {
+                "color": "#070f16"
+              }
+            ]
+          },
+          {
+            "featureType": "water",
+            "elementType": "labels.text.fill",
+            "stylers": [
+              {
+                "color": "#4e6d70"
+              }
+            ]
+          }
+        ];
+    </script>
+    <script async defer
+        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAlnBT4qBjIXN5IOZdPr3XVTAcMc3x3cog&callback=initApp">
+    </script>
+  </body>
+</html>
